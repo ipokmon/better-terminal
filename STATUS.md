@@ -4,7 +4,7 @@
 **Last session:** 2026-11-04 | **Last QA:** see QA_LOG.md
 
 ## Working (verified)
-- Default-terminal handling (branch `feat/default-terminal-handler`): Info.plist document and URL types; `application(_:open:)` for files and ssh/telnet/x-man-page URLs; pure parser `OpenRequest` with 30+ tests. `make test`: 69 tests pass.
+- Default-terminal handling (branch `feat/default-terminal-handler`): Info.plist document and URL types; `application(_:open:)` for files and ssh/telnet/x-man-page URLs; pure parser `OpenRequest` with 30+ tests. `make test`: 77 tests pass.
 - End to end with the locally built bundle (`make app`, then `open -a build/…`, not installed; the build copy was unregistered from LaunchServices afterwards): cold launch with a `.command` in a folder named `it's $x` ran it from that folder, 3/3 runs, one window each; warm open, a batch of two files (two windows), and `x-man-page://3/printf` (`man 3 -- printf`) worked; an `ssh://-oProxyCommand=…` link showed the rejection alert and ran nothing.
 
 ## In progress
@@ -28,4 +28,5 @@ None.
 3. Check Finder double-click of a `.command` and an `ssh://` link from a browser once it is the default.
 
 ## Session log (newest first, 1-2 lines each)
+- 2026-11-04: QA attempt 1 FAIL (percent-decoded control chars in ssh/telnet user). Fixed: user allowlist, colons only in IPv6 brackets, U+2028/2029 rejected, final control-char pass on every argv element; 8 new tests.
 - 2026-11-04: added default-terminal handling (document/URL types, open handler, OpenRequest parser + tests). SPEC/STATUS created.

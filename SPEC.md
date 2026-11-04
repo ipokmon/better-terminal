@@ -17,7 +17,7 @@ The CEO wants Better Terminal to be the macOS default app for terminal things: d
 - [x] AC2: Opening a file runs it in a new window: `cd -- '<dir>' && '<path>'` in the user's login shell (zsh with Better Terminal's integration), on a cold launch and in a running app.
 - [x] AC3: `ssh://user@host:port` runs `ssh -p port -- user@host`; `telnet://user@host:port` runs `telnet -l user -- host port`; `x-man-page://name` runs `man -- name`; `x-man-page://3/printf` runs `man 3 -- printf`.
 - [x] AC4: Every command line is built from an argv by POSIX single-quoting each element (`OpenRequest.shellQuote`); a test round-trips hostile strings through real `/bin/zsh` and `/bin/sh`.
-- [x] AC5: Malformed or unsafe input is rejected with a visible alert listing each reason, and nothing runs: relative paths, control characters (C0, DEL, C1), unsupported schemes, missing/invalid hosts, hosts or users starting with `-`, users with whitespace/`@`/`:`, passwords, ports outside 1–65535, extra path/query/fragment, bad man names or sections.
+- [x] AC5: Malformed or unsafe input is rejected with a visible alert listing each reason, and nothing runs: relative paths, control characters (C0, DEL, C1, U+2028/U+2029) in any decoded component or argv element, unsupported schemes, missing/invalid hosts (colons only inside IPv6 `[brackets]`), hosts or users starting with `-`, users outside `[A-Za-z0-9._~+-]`, passwords, ports outside 1–65535, extra path/query/fragment, bad man names or sections.
 - [x] AC6: Parsing and routing are pure functions in BTCore (`OpenRequest`, `OpenRoute`) with tests per scheme, for paths with spaces and quotes, and for each rejection.
 - [x] AC7: One window per opened item: no extra empty window per open event, and a batch of N items opens N windows.
 - [x] AC8: `make test` passes.
@@ -32,6 +32,7 @@ The CEO wants Better Terminal to be the macOS default app for terminal things: d
 - "Exec it with the user's login shell" means type the quoted command into the pane's login shell, as Terminal.app does, rather than `exec` replacing the shell. The pane stays open afterwards so the output stays readable (Terminal.app's default profile closes or keeps it, depending on settings).
 - Typed commands go into zsh history, as in Terminal.app.
 - Opened items always get a new window; they never reuse an existing pane. That avoids appending to text the user had half typed. (Reusing the cold-launch window lost the command in testing; see STATUS.)
+- A trailing `/` on ssh/telnet links (`ssh://h/`) is accepted and ignored: it is the empty path, not data.
 - `--` before the destination in ssh/telnet/man is defence in depth on top of validation.
 
 ## Open questions

@@ -41,8 +41,8 @@ public enum OpenRequestError: Error, Equatable, CustomStringConvertible {
         case .unsupportedScheme(let s): return "Better Terminal does not open this kind of link: \(s)"
         case .malformedURL(let s): return "Not a valid link: \(s)"
         case .missingHost(let s): return "The link names no host: \(s)"
-        case .invalidHost(let s): return "Host name not allowed (letters, digits, . - _ : only, not starting with -): \(s)"
-        case .invalidUser(let s): return "User name not allowed (no spaces, @ or :, not starting with -): \(s)"
+        case .invalidHost(let s): return "Host name not allowed (letters, digits, . - _ only, not starting with -; IPv6 in [brackets]): \(s)"
+        case .invalidUser(let s): return "User name not allowed (letters, digits, . _ ~ + - only, not starting with -): \(s)"
         case .passwordInURL(let s): return "Passwords in links are not supported; ssh asks for it instead: \(s)"
         case .invalidPort(let s): return "Port must be 1–65535: \(s)"
         case .unexpectedComponent(let s): return "The link has a path, query or fragment this scheme does not use: \(s)"
@@ -63,7 +63,7 @@ public enum OpenRequest {
         try rejectControlCharacters(path)
         guard path.hasPrefix("/") else { throw OpenRequestError.notAbsolutePath(path) }
         let dir = (path as NSString).deletingLastPathComponent
-        return LaunchPlan(directory: dir.isEmpty ? "/" : dir, argv: [path])
+        return try validated(LaunchPlan(directory: dir.isEmpty ? "/" : dir, argv: [path]))
     }
 
     /// A file URL runs the file; ssh, telnet and x-man-page URLs run the matching program.
@@ -78,11 +78,18 @@ public enum OpenRequest {
             throw OpenRequestError.malformedURL(string)
         }
         switch scheme {
-        case "ssh": return try remoteLogin(c, string, program: "ssh")
-        case "telnet": return try remoteLogin(c, string, program: "telnet")
-        case "x-man-page": return try manPage(c, string)
+        case "ssh": return try validated(remoteLogin(c, string, program: "ssh"))
+        case "telnet": return try validated(remoteLogin(c, string, program: "telnet"))
+        case "x-man-page": return try validated(manPage(c, string))
         default: throw OpenRequestError.unsupportedScheme(string)
         }
+    }
+
+    /// Last line of defence: URL components arrive percent-decoded, so whatever the per-component
+    /// checks missed, no argv element or folder may carry a control or line-separator character.
+    public static func validated(_ plan: LaunchPlan) throws -> LaunchPlan {
+        for s in plan.argv + (plan.directory.map { [$0] } ?? []) { try rejectControlCharacters(s) }
+        return plan
     }
 
     // MARK: Schemes
@@ -128,29 +135,39 @@ public enum OpenRequest {
 
     static func rejectControlCharacters(_ s: String) throws {
         // C0, DEL and C1: the PTY and zsh's line editor act on these even inside quotes.
-        if s.unicodeScalars.contains(where: { $0.value < 0x20 || (0x7F...0x9F).contains($0.value) }) {
+        // U+2028/U+2029: line and paragraph separators, which some terminals and tools treat as newlines.
+        if s.unicodeScalars.contains(where: { $0.value < 0x20 || (0x7F...0x9F).contains($0.value) || $0.value == 0x2028 || $0.value == 0x2029 }) {
             throw OpenRequestError.controlCharacter(s)
         }
     }
 
     private static let alnum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    private static let hostCharacters = CharacterSet(charactersIn: alnum + ".-_:")
+    private static let hostCharacters = CharacterSet(charactersIn: alnum + ".-_")
+    private static let ipv6Characters = CharacterSet(charactersIn: "0123456789abcdefABCDEF:.")
+    private static let userCharacters = CharacterSet(charactersIn: alnum + "._~+-")
     private static let manCharacters = CharacterSet(charactersIn: alnum + ".-_+:")
     private static let sectionCharacters = CharacterSet(charactersIn: alnum)
     private static let maxSectionLength = 8
 
     private static func validHost(_ host: String?, _ raw: String) throws -> String {
-        guard var h = host, !h.isEmpty else { throw OpenRequestError.missingHost(raw) }
-        if h.hasPrefix("["), h.hasSuffix("]") { h = String(h.dropFirst().dropLast()) } // IPv6 literal
-        guard !h.isEmpty, !h.hasPrefix("-"), h.unicodeScalars.allSatisfy(hostCharacters.contains) else {
+        guard let h = host, !h.isEmpty else { throw OpenRequestError.missingHost(raw) }
+        // Colons only inside an IPv6 literal's brackets: [fe80::1] → fe80::1.
+        if h.hasPrefix("["), h.hasSuffix("]") {
+            let inner = String(h.dropFirst().dropLast())
+            guard inner.contains(":"), inner.unicodeScalars.allSatisfy(ipv6Characters.contains) else {
+                throw OpenRequestError.invalidHost(inner)
+            }
+            return inner
+        }
+        guard !h.hasPrefix("-"), h.unicodeScalars.allSatisfy(hostCharacters.contains) else {
             throw OpenRequestError.invalidHost(h)
         }
         return h
     }
 
     private static func validUser(_ user: String) throws -> String {
-        guard !user.isEmpty, !user.hasPrefix("-"),
-              !user.unicodeScalars.contains(where: { CharacterSet.whitespaces.contains($0) || $0 == "@" || $0 == ":" })
+        // Allowlist on the percent-decoded user: %0A, %1B, %C2%85 and the like decode to raw control bytes.
+        guard !user.isEmpty, !user.hasPrefix("-"), user.unicodeScalars.allSatisfy(userCharacters.contains)
         else { throw OpenRequestError.invalidUser(user) }
         return user
     }

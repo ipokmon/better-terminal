@@ -189,3 +189,53 @@ private func zshArguments(_ args: [String], shell: String = "/bin/zsh") throws -
         #expect(OpenRoute.decide(queueIsEmpty: true, canOpenWindows: false, finishedLaunching: false) == .waitForLaunch)
     }
 }
+
+/// Percent-decoded components must be validated after decoding (QA attempt 1, HIGH/MED).
+@Suite struct DecodedComponentTests {
+    static let encodedControls = ["%0A", "%0D", "%1B", "%03", "%15", "%7F", "%C2%85", "%E2%80%A8"]
+
+    @Test(arguments: encodedControls)
+    func sshUserRejectsEncodedControl(code: String) {
+        #expect(throws: OpenRequestError.self) { try plan("ssh://u\(code)x@host") }
+    }
+
+    @Test(arguments: encodedControls)
+    func telnetUserRejectsEncodedControl(code: String) {
+        #expect(throws: OpenRequestError.self) { try plan("telnet://u\(code)x@host") }
+    }
+
+    @Test func userAllowlist() throws {
+        #expect(try plan("ssh://a.b_c~d+e-f@host").argv == ["ssh", "--", "a.b_c~d+e-f@host"])
+        rejects("ssh://a%2Fb@host", .invalidUser("a/b"))
+        rejects("ssh://%C3%A9@host", .invalidUser("é"))
+    }
+
+    @Test func userStartingWithDash() {
+        rejects("ssh://-l@host", .invalidUser("-l"))
+        rejects("telnet://-l@host", .invalidUser("-l"))
+    }
+
+    @Test func badTelnetUser() {
+        rejects("telnet://a%20b@host", .invalidUser("a b"))
+        rejects("telnet://bob:pw@host", .passwordInURL("telnet://bob:pw@host"))
+    }
+
+    @Test func colonOnlyInsideIPv6Brackets() throws {
+        rejects("ssh://ho%3Ast", .invalidHost("ho:st"))
+        #expect(try plan("ssh://[fe80::1]").argv == ["ssh", "--", "fe80::1"])
+    }
+
+    @Test(arguments: ["/tmp/a\u{2028}b.sh", "/tmp/a\u{2029}b.sh", "/tmp/a\u{85}b.sh"])
+    func filePathRejectsUnicodeSeparators(path: String) {
+        #expect(throws: OpenRequestError.controlCharacter(path)) { try OpenRequest.plan(forFile: path) }
+    }
+
+    @Test func finalPassChecksEveryArgvElement() {
+        #expect(throws: OpenRequestError.controlCharacter("a\nb")) {
+            try OpenRequest.validated(LaunchPlan(directory: nil, argv: ["ok", "a\nb"]))
+        }
+        #expect(throws: OpenRequestError.controlCharacter("/d\u{1B}")) {
+            try OpenRequest.validated(LaunchPlan(directory: "/d\u{1B}", argv: ["ok"]))
+        }
+    }
+}
