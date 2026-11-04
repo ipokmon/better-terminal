@@ -41,8 +41,9 @@ struct WindowView: View {
     @StateObject private var model: WindowModel
     @Environment(\.openWindow) private var openWindow
 
-    init(model: WindowModel? = nil) {
-        _model = StateObject(wrappedValue: model ?? WindowModel())
+    /// `ticket`: set when OpenHandler opened this window for a queued file or URL; nil for ⌘N, tabs, splits.
+    init(model: WindowModel? = nil, ticket: LaunchTicket? = nil) {
+        _model = StateObject(wrappedValue: model ?? WindowModel(plan: OpenHandler.claim(ticket)))
     }
 
     var body: some View {
@@ -56,7 +57,10 @@ struct WindowView: View {
             })
             .navigationTitle(model.title)
             .focusedSceneObject(model)
-            .onAppear { let open = openWindow; AppActions.openPaneWindow = { open(id: "pane") } }
+            .onAppear {
+                let open = openWindow
+                AppActions.openPaneWindow = { open(id: "pane") }
+            }
             .onDisappear { model.closeAll() }
     }
 }

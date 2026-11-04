@@ -30,10 +30,13 @@ struct BetterTerminalApp: App {
     @ObservedObject private var prefs = Prefs.shared
 
     var body: some Scene {
-        WindowGroup(id: "pane") {
-            WindowView().frame(minWidth: 480, minHeight: 320)
+        // Opened files and URLs get a window opened with their LaunchTicket; ⌘N opens one with nil.
+        WindowGroup(id: "pane", for: LaunchTicket.self) { $ticket in
+            WindowView(ticket: ticket).frame(minWidth: 480, minHeight: 320)
         }
         .defaultSize(width: 900, height: 650)
+        // Opened files and URLs go to AppDelegate (OpenHandler); without this SwiftUI also opens an empty window per event.
+        .handlesExternalEvents(matching: [])
         .commands { PaneCommands(prefs: prefs) }
 
         Settings { SettingsView() }
@@ -48,6 +51,8 @@ struct PaneCommands: Commands {
     private var pane: PaneModel? { window?.focused }
 
     var body: some Commands {
+        // The menu bar exists before any window, so this is how a document launch opens its first one.
+        let _ = AppActions.registerOpener(openWindow)
         CommandGroup(after: .newItem) {
             Button("New Tab") { AppActions.newTab(from: NSApp.keyWindow) }
                 .keyboardShortcut("t", modifiers: .command)
@@ -133,6 +138,13 @@ struct PaneCommands: Commands {
 @MainActor
 enum AppActions {
     static var openPaneWindow: (() -> Void)?
+    /// Opens a pane window for a queued file or URL (see OpenHandler).
+    static var openTicketWindow: ((LaunchTicket) -> Void)?
+
+    static func registerOpener(_ open: OpenWindowAction) {
+        openTicketWindow = { open(id: "pane", value: $0) }
+        if openPaneWindow == nil { openPaneWindow = { open(id: "pane") } }
+    }
 
     /// Opens a pane window as a tab of `parent`, in the folder of `parent`'s focused pane.
     static func newTab(from parent: NSWindow?) {
@@ -194,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = true
         if CommandLine.arguments.contains("--classic") { Prefs.shared.forceSafeMode() }
         keyMonitor = AppDelegate.installKeyMonitor()
+        MainActor.assumeIsolated { OpenHandler.didFinishLaunching() }
         // Scrolling up in a thread stops it following new output.
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             MainActor.assumeIsolated {
@@ -259,6 +272,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return event
         }
+    }
+
+    /// Finder, `open` and links hand us scripts and ssh/telnet/x-man-page URLs, on a cold launch too.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated { OpenHandler.open(urls) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

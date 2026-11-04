@@ -1,4 +1,5 @@
 import AppKit
+import BTCore
 import SwiftUI
 
 /// The pane layout of one window: a binary tree of splits with panes at the leaves.
@@ -44,9 +45,11 @@ final class WindowModel: ObservableObject {
     /// Folder for the next window's first pane (new tab in the current folder).
     static var pendingCwd: String?
 
-    init() {
-        let p = PaneModel(cwd: Self.pendingCwd)
+    /// `plan`: a file or URL opened from Finder or a link (see OpenHandler), run in the first pane.
+    init(plan: LaunchPlan? = nil) {
+        let p = PaneModel(cwd: plan?.directory ?? Self.pendingCwd)
         Self.pendingCwd = nil
+        if let plan { p.run(plan) }
         root = .pane(p)
         focused = p
         p.host = self

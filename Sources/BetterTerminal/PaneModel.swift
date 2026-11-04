@@ -430,6 +430,9 @@ final class PaneModel: ObservableObject {
         if sawPrompt, running == nil, !script.isEmpty { session.send(script.removeFirst() + "\r") }
     }
 
+    /// Runs an opened file or URL (see OpenHandler) at the next prompt, quoted from its argv.
+    func run(_ plan: LaunchPlan) { runScript([plan.commandLine]) }
+
     /// What the on-screen terminal views show, for screenshots.
     var standIns: [TerminalStandIn] {
         if showsClassic {
