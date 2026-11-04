@@ -172,21 +172,83 @@ private func zshArguments(_ args: [String], shell: String = "/bin/zsh") throws -
 }
 
 @Suite struct OpenRouteTests {
-    @Test func aBatchOpensOneWindowAtATime() {
-        #expect(OpenRoute.decide(queueIsEmpty: false, canOpenWindows: true, finishedLaunching: true) == .waitForQueuedWindow)
-        #expect(OpenRoute.decide(queueIsEmpty: false, canOpenWindows: false, finishedLaunching: false) == .waitForQueuedWindow)
-    }
-
-    @Test func runningAppOpensAWindow() {
-        #expect(OpenRoute.decide(queueIsEmpty: true, canOpenWindows: true, finishedLaunching: true) == .openWindow)
-    }
-
-    @Test func documentLaunchWithNoWindowUsesTheMenu() {
-        #expect(OpenRoute.decide(queueIsEmpty: true, canOpenWindows: false, finishedLaunching: true) == .openWindowFromMenu)
+    @Test func runningAppOpensAWindowPerTicket() {
+        #expect(OpenRoute.decide(canOpenWindows: true, finishedLaunching: true) == .openWindow)
     }
 
     @Test func beforeLaunchFinishesItWaits() {
-        #expect(OpenRoute.decide(queueIsEmpty: true, canOpenWindows: false, finishedLaunching: false) == .waitForLaunch)
+        #expect(OpenRoute.decide(canOpenWindows: false, finishedLaunching: false) == .waitForLaunch)
+        #expect(OpenRoute.decide(canOpenWindows: true, finishedLaunching: false) == .waitForLaunch)
+    }
+
+    /// No opener after launch: the plan must not sit in the queue (QA attempt 2, MED).
+    @Test func noOpenerAfterLaunchFails() {
+        #expect(OpenRoute.decide(canOpenWindows: false, finishedLaunching: true) == .cannotOpen)
+    }
+}
+
+private func filePlan(_ name: String) -> LaunchPlan { LaunchPlan(directory: "/tmp", argv: ["/tmp/\(name)"]) }
+
+/// Ticketed queue: a window runs only the plan queued for it (QA attempt 2, MED).
+@Suite struct LaunchQueueTests {
+    @Test func eachTicketClaimsItsOwnPlan() {
+        var q = LaunchQueue()
+        let a = q.enqueue(filePlan("a")), b = q.enqueue(filePlan("b")), c = q.enqueue(filePlan("c"))
+        #expect(q.tickets == [a, b, c])
+        // Windows may appear in any order; each still gets its own plan.
+        #expect(q.claim(b) == filePlan("b"))
+        #expect(q.claim(c) == filePlan("c"))
+        #expect(q.claim(a) == filePlan("a"))
+        #expect(q.isEmpty)
+    }
+
+    @Test func nothingRunsTwice() {
+        var q = LaunchQueue()
+        let a = q.enqueue(filePlan("a"))
+        #expect(q.claim(a) != nil)
+        #expect(q.claim(a) == nil)
+    }
+
+    @Test func plainNewWindowGetsNothing() {
+        var q = LaunchQueue()
+        _ = q.enqueue(filePlan("a"))
+        #expect(q.claim(nil) == nil)
+        #expect(q.claim(LaunchTicket()) == nil) // a restored or foreign ticket
+        #expect(q.count == 1)
+    }
+
+    @Test func drainReturnsLeftoversInOrderAndEmpties() {
+        var q = LaunchQueue()
+        let a = q.enqueue(filePlan("a"))
+        _ = q.enqueue(filePlan("b"))
+        _ = q.enqueue(filePlan("c"))
+        _ = q.claim(a)
+        #expect(q.drain() == [filePlan("b"), filePlan("c")])
+        #expect(q.isEmpty)
+        #expect(q.drain().isEmpty)
+    }
+
+    @Test func ticketsAreUnique() {
+        var q = LaunchQueue()
+        let t = (0..<100).map { q.enqueue(filePlan("\($0)")) }
+        #expect(Set(t).count == 100)
+    }
+}
+
+@Suite struct AlertTextTests {
+    @Test func decodedUserIsEscapedInAlerts() {
+        let d = OpenRequestError.invalidUser("\u{202E}evil\u{1B}").description
+        #expect(!d.unicodeScalars.contains { $0.value == 0x202E || $0.value == 0x1B })
+        #expect(d.contains(#"\u{202E}evil\u{1B}"#))
+    }
+
+    @Test func displaySafeEscapesOnlyNonASCII() {
+        #expect(OpenRequest.displaySafe("a b'$") == "a b'$")
+        #expect(OpenRequest.displaySafe("\u{2028}é") == #"\u{2028}\u{E9}"#)
+    }
+
+    @Test func plainTextStaysReadable() {
+        #expect(OpenRequestError.invalidHost("ho st").description.hasSuffix("ho st"))
     }
 }
 

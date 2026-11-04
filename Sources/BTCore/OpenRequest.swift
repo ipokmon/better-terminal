@@ -36,22 +36,30 @@ public enum OpenRequestError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .notAbsolutePath(let s): return "Not an absolute file path: \(s)"
-        case .controlCharacter(let s): return "Contains a control character (newline, tab, escape…): \(s.debugDescription)"
-        case .unsupportedScheme(let s): return "Better Terminal does not open this kind of link: \(s)"
-        case .malformedURL(let s): return "Not a valid link: \(s)"
-        case .missingHost(let s): return "The link names no host: \(s)"
-        case .invalidHost(let s): return "Host name not allowed (letters, digits, . - _ only, not starting with -; IPv6 in [brackets]): \(s)"
-        case .invalidUser(let s): return "User name not allowed (letters, digits, . _ ~ + - only, not starting with -): \(s)"
-        case .passwordInURL(let s): return "Passwords in links are not supported; ssh asks for it instead: \(s)"
-        case .invalidPort(let s): return "Port must be 1–65535: \(s)"
-        case .unexpectedComponent(let s): return "The link has a path, query or fragment this scheme does not use: \(s)"
-        case .invalidManPage(let s): return "Not a manual page name: \(s)"
+        case .notAbsolutePath(let s): return "Not an absolute file path: \(safe(s))"
+        case .controlCharacter(let s): return "Contains a control character (newline, tab, escape…): \(safe(s))"
+        case .unsupportedScheme(let s): return "Better Terminal does not open this kind of link: \(safe(s))"
+        case .malformedURL(let s): return "Not a valid link: \(safe(s))"
+        case .missingHost(let s): return "The link names no host: \(safe(s))"
+        case .invalidHost(let s): return "Host name not allowed (letters, digits, . - _ only, not starting with -; IPv6 in [brackets]): \(safe(s))"
+        case .invalidUser(let s): return "User name not allowed (letters, digits, . _ ~ + - only, not starting with -): \(safe(s))"
+        case .passwordInURL(let s): return "Passwords in links are not supported; ssh asks for it instead: \(safe(s))"
+        case .invalidPort(let s): return "Port must be 1–65535: \(safe(s))"
+        case .unexpectedComponent(let s): return "The link has a path, query or fragment this scheme does not use: \(safe(s))"
+        case .invalidManPage(let s): return "Not a manual page name: \(safe(s))"
         }
     }
 }
 
+private func safe(_ s: String) -> String { OpenRequest.displaySafe(s) }
+
 public enum OpenRequest {
+    /// For alert text: escape anything that is not printable ASCII (control bytes, bidi overrides such
+    /// as U+202E, separators) so a decoded URL or file name cannot spoof the message.
+    public static func displaySafe(_ s: String) -> String {
+        s.unicodeScalars.map { (0x20..<0x7F).contains($0.value) ? String($0) : "\\u{\(String($0.value, radix: 16, uppercase: true))}" }.joined()
+    }
+
     /// POSIX single quoting: 'it'\''s'. Inside single quotes zsh and sh treat every byte literally
     /// (no $, `, \, ! or glob expansion), so this is safe for any string without control characters.
     public static func shellQuote(_ s: String) -> String {
@@ -182,24 +190,5 @@ public enum OpenRequest {
     private static func isSection(_ s: String) -> Bool {
         guard let f = s.first, f.isASCII, f.isNumber, s.count <= maxSectionLength else { return false }
         return s.unicodeScalars.allSatisfy(sectionCharacters.contains)
-    }
-}
-
-/// How an accepted open request gets its pane window. Pure, so the app's window bookkeeping is testable.
-/// Every request runs in a new window's first pane (WindowModel takes it from a queue as it appears).
-public enum OpenRoute: Equatable, Sendable {
-    /// An earlier request is still waiting for its window; that window asks for the next one.
-    case waitForQueuedWindow
-    /// Open a window now through SwiftUI's openWindow.
-    case openWindow
-    /// No window has appeared yet (launched to open this, so SwiftUI made none): use File ▸ New Window.
-    case openWindowFromMenu
-    /// Still launching: applicationDidFinishLaunching opens the window.
-    case waitForLaunch
-
-    public static func decide(queueIsEmpty: Bool, canOpenWindows: Bool, finishedLaunching: Bool) -> OpenRoute {
-        if !queueIsEmpty { return .waitForQueuedWindow }
-        if canOpenWindows { return .openWindow }
-        return finishedLaunching ? .openWindowFromMenu : .waitForLaunch
     }
 }

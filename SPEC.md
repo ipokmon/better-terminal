@@ -21,11 +21,14 @@ The CEO wants Better Terminal to be the macOS default app for terminal things: d
 - [x] AC6: Parsing and routing are pure functions in BTCore (`OpenRequest`, `OpenRoute`) with tests per scheme, for paths with spaces and quotes, and for each rejection.
 - [x] AC7: One window per opened item: no extra empty window per open event, and a batch of N items opens N windows.
 - [x] AC8: `make test` passes.
+- [x] AC9: A window runs only the plan queued for it: each plan gets a `LaunchTicket` and its window is opened with `openWindow(id:value:)`; a ⌘N, tab or split window carries no ticket and runs nothing. A plan whose window does not appear within `OpenHandler.windowTimeout` (10 s), or that has no way to open a window, is removed from the queue and listed in an alert. Queue logic is the pure `LaunchQueue` with tests.
+- [x] AC10: Alert text escapes non-printable-ASCII characters (`OpenRequest.displaySafe`), so a decoded name cannot spoof the message.
 
 ## Architecture
 - `BTCore/OpenRequest.swift`: `OpenRequest.plan(for: URL) throws -> LaunchPlan` (directory + argv; `commandLine` quotes it). `OpenRoute.decide` picks how the plan gets its window.
-- `BetterTerminal/OpenHandler.swift`: `AppDelegate.application(_:open:)` → plans → `WindowModel.pendingLaunches`. Each new `WindowModel` takes one plan for its first pane (`PaneModel.run` → `runScript`, sent at the first prompt). A window that appears opens the next window while plans remain queued, so one open at a time.
-- The WindowGroup has `.handlesExternalEvents(matching: [])`: otherwise SwiftUI opens an extra empty window per open event. With it, a document launch gets no SwiftUI window, so `didFinishLaunching` uses SwiftUI's own File ▸ New Window.
+- `BTCore/LaunchQueue.swift`: `LaunchTicket`, `LaunchQueue` (enqueue → ticket, claim by ticket, drain leftovers), `OpenRoute.decide`.
+- `BetterTerminal/OpenHandler.swift`: `AppDelegate.application(_:open:)` → plans → queue → `openWindow(id: "pane", value: ticket)`. The WindowGroup is `WindowGroup(id: "pane", for: LaunchTicket.self)`; `WindowView` claims its ticket's plan for its first pane (`PaneModel.run` → `runScript`, sent at the first prompt).
+- The WindowGroup has `.handlesExternalEvents(matching: [])`: otherwise SwiftUI opens an extra empty window per open event. A document launch therefore has no window, so the opener comes from `PaneCommands` (the menu bar's environment `openWindow`, available before any window); `didFinishLaunching` opens the queued tickets one run-loop turn later. No menu-title lookup.
 - Document types use `LSHandlerRank` `Alternate`, so installing the app never makes it the default by itself.
 
 ## Assumptions

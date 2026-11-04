@@ -30,8 +30,9 @@ struct BetterTerminalApp: App {
     @ObservedObject private var prefs = Prefs.shared
 
     var body: some Scene {
-        WindowGroup(id: "pane") {
-            WindowView().frame(minWidth: 480, minHeight: 320)
+        // Opened files and URLs get a window opened with their LaunchTicket; ⌘N opens one with nil.
+        WindowGroup(id: "pane", for: LaunchTicket.self) { $ticket in
+            WindowView(ticket: ticket).frame(minWidth: 480, minHeight: 320)
         }
         .defaultSize(width: 900, height: 650)
         // Opened files and URLs go to AppDelegate (OpenHandler); without this SwiftUI also opens an empty window per event.
@@ -50,6 +51,8 @@ struct PaneCommands: Commands {
     private var pane: PaneModel? { window?.focused }
 
     var body: some Commands {
+        // The menu bar exists before any window, so this is how a document launch opens its first one.
+        let _ = AppActions.registerOpener(openWindow)
         CommandGroup(after: .newItem) {
             Button("New Tab") { AppActions.newTab(from: NSApp.keyWindow) }
                 .keyboardShortcut("t", modifiers: .command)
@@ -135,6 +138,13 @@ struct PaneCommands: Commands {
 @MainActor
 enum AppActions {
     static var openPaneWindow: (() -> Void)?
+    /// Opens a pane window for a queued file or URL (see OpenHandler).
+    static var openTicketWindow: ((LaunchTicket) -> Void)?
+
+    static func registerOpener(_ open: OpenWindowAction) {
+        openTicketWindow = { open(id: "pane", value: $0) }
+        if openPaneWindow == nil { openPaneWindow = { open(id: "pane") } }
+    }
 
     /// Opens a pane window as a tab of `parent`, in the folder of `parent`'s focused pane.
     static func newTab(from parent: NSWindow?) {

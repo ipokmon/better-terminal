@@ -44,11 +44,9 @@ final class WindowModel: ObservableObject {
     static weak var pendingTabParent: NSWindow?
     /// Folder for the next window's first pane (new tab in the current folder).
     static var pendingCwd: String?
-    /// Files and URLs opened from Finder or links, one per new window (see OpenHandler).
-    static var pendingLaunches: [LaunchPlan] = []
 
-    init() {
-        let plan = Self.pendingLaunches.isEmpty ? nil : Self.pendingLaunches.removeFirst()
+    /// `plan`: a file or URL opened from Finder or a link (see OpenHandler), run in the first pane.
+    init(plan: LaunchPlan? = nil) {
         let p = PaneModel(cwd: plan?.directory ?? Self.pendingCwd)
         Self.pendingCwd = nil
         if let plan { p.run(plan) }
