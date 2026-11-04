@@ -57,3 +57,68 @@ Not tested:
 Confidence in verdict: med-high. The security fix is verified by running real inputs. The window-queue behavior is verified only by reading the code.
 ```
 Note: the cold-launch, warm, batch-of-two and rejection paths were exercised by hand on 28edc50's app code (unchanged by c582ada) before QA; see STATUS.md.
+
+## 2026-11-04 | default-terminal handler, attempt 3 (28cbc93) | PASS WITH ISSUES
+
+Run by this child session. Build model: Opus. QA model: Sonnet. qa-redteam, verbatim:
+```
+VERDICT: PASS WITH ISSUES
+App: better-terminal | Commit: 28cbc93
+
+Both MED findings from c582ada are fixed. I found no CRITICAL or HIGH issues. The remaining gaps are LOW and are about test coverage and a harmless race.
+
+Gate results
+- `make test` passes, with the new Swift Testing suites LaunchQueueTests, OpenRouteTests and AlertTextTests included.
+- `make check-windows` passes. Menu New Window opens a separate window and New Tab joins as a tab.
+- That run goes through `open(id:"pane")` on the now value-typed `WindowGroup(for: LaunchTicket.self)`, so Cmd-N and tabs still work with a nil ticket.
+- I did not run `make install`, `open` or lsregister. The worktree is clean.
+
+MED findings
+- (1) Misrouting is fixed by design.
+  - `LaunchQueue.claim(ticket)` removes only the plan queued for that ticket. A nil or unknown ticket returns nil, so Cmd-N, tab and split windows run nothing.
+  - `WindowView` passes its ticket into `WindowModel(plan: OpenHandler.claim(ticket))`. The old `pendingLaunches.removeFirst()` and `continueQueue` are gone (WindowModel.swift:44-49, Views.swift:44-46).
+  - The tests `eachTicketClaimsItsOwnPlan` (claims in any order), `plainNewWindowGetsNothing` and `nothingRunsTwice` fail against the old pop-next behaviour.
+- (2) The queue now has tests: LaunchQueueTests (5), OpenRouteTests (3) and AlertTextTests.
+
+Dropped, duplicated or run twice
+- Nothing is dropped.
+  - A plan whose window never appears is claimed out of the queue after the 10 s `windowTimeout` and reported in an alert (OpenHandler.swift:~55).
+  - `.cannotOpen` and a missing opener at launch drain the queue and report what did not run.
+- Nothing runs twice. `claim` removes the plan on first use.
+- A window that appears late, after the timeout, claims nil and becomes a plain shell. The plan was already reported as not run, so it is consistent.
+- State-restored windows carry a stale ticket from the Codable value. The in-memory queue does not know it, so `claim` returns nil and the window is a plain shell. This follows from the queue logic and the `q.claim(LaunchTicket())` test, not from a real relaunch.
+- New tabs use `openPaneWindow` with no value, so they carry no ticket and run nothing.
+
+Errors are not swallowed
+- Rejected parses are collected and shown in an alert.
+- A non-OpenRequestError error is also reported.
+- Alert text goes through `displaySafe`, which escapes everything outside printable ASCII.
+- Quoting (`shellQuote`) and the decoded-component validation are unchanged in this diff and their tests still pass.
+
+Findings
+1. LOW, OpenHandler.swift:~19-25 and ~34-40: possible double request for one ticket.
+   - `didFinishLaunching` sets `finishedLaunching` and defers its window opening by one run-loop turn.
+   - If `open()` arrives in that gap and an opener is already registered, `route` calls `request(ticket)` immediately.
+   - The deferred block then calls `queue.tickets.forEach(request)`, which requests the same ticket again.
+   - SwiftUI dedups `openWindow` for an equal value, and the claim is single-use, so I expect no double run.
+   - A second timeout is scheduled but does nothing once the plan is claimed.
+   - I did not reproduce this. It is a tidiness issue only.
+   - Fix: track tickets already requested, or have the deferred block request only unrequested ones.
+2. LOW, Tests: the wiring is untested.
+   - The pure queue and route logic is well tested.
+   - Nothing exercises the `WindowView` to `OpenHandler.claim` to `WindowModel(plan:)` path or the timeout timer. `check-windows` covers only nil-ticket windows.
+   - A regression to "pop next" in `WindowView` would not be caught by the new tests.
+   - Fix: extend `check-windows` to open a ticketed window with a harmless plan, or inject the queue into `OpenHandler`.
+3. LOW, Views.swift:44-46: `OpenHandler.claim` is a side effect inside a `@StateObject` autoclosure.
+   - It is correct today because SwiftUI evaluates that closure once per identity.
+   - It is fragile if `WindowView` is ever created with an explicit `model` or the identity changes.
+4. LOW, `displaySafe` escapes all non-ASCII, so legitimate unicode file names show as `\u{E9}` in alerts. This is safe but less readable.
+
+Not tested
+- A real Finder or URL launch (cold start with a document, ssh:// links), because `open` and LaunchServices were off limits. Cold-start ordering, the opener registered from the `PaneCommands` body, and the timeout alert under real conditions are reasoned from code only.
+- Real state restoration after quit and relaunch.
+- Mutation runs of the tests, which I did not do. I judged them by reading.
+
+Confidence in verdict: medium-high. The logic is pure and well tested, and the menu-driven window path is verified live. The Finder-launch path is verified by reading only.
+```
+Note: the real cold-launch (3/3), warm, batch (file + man page) and rejection paths were exercised by hand on 28cbc93 by the build session before QA; see STATUS.md.

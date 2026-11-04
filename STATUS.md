@@ -1,7 +1,7 @@
 # STATUS: better-terminal
 
 **State:** QA
-**Last session:** 2026-11-04 | **Last QA:** PASS WITH ISSUES (2026-11-04, attempt 2, c582ada)
+**Last session:** 2026-11-04 | **Last QA:** PASS WITH ISSUES (2026-11-04, attempt 3, 28cbc93)
 
 ## Working (verified)
 - Default-terminal handling (branch `feat/default-terminal-handler`): Info.plist document and URL types; `application(_:open:)` for files and ssh/telnet/x-man-page URLs; pure parser `OpenRequest` with 30+ tests. `make test`: 84 tests pass. Opened items are routed by `LaunchTicket` (⌘N windows never take one).
@@ -14,6 +14,8 @@
 | Sev | Issue | Since |
 |---|---|---|
 | low | `telnet` is not shipped with macOS; telnet links show "command not found" unless one is installed | 2026-11-04 |
+| low | Window wiring (WindowView → claim → WindowModel) and the timeout have no automated test; checked by hand only (QA attempt 3) | 2026-11-04 |
+| low | Possible duplicate openWindow request for one ticket if an open arrives in the one-turn gap after launch; claim is single-use so it cannot run twice (QA attempt 3) | 2026-11-04 |
 | low | Reusing the window SwiftUI opens at a document launch lost the typed command (seen 3/3, cause not found); avoided by always opening a fresh window | 2026-11-04 |
 
 ## Blocked on / needs CEO
