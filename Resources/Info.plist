@@ -15,5 +15,51 @@
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSSupportsAutomaticTermination</key><false/>
 	<key>NSSupportsSuddenTermination</key><false/>
+	<!-- Opened files run in a new pane (OpenHandler). Rank Alternate: never the default unless set explicitly. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key><string>Terminal Shell Script</string>
+			<key>CFBundleTypeRole</key><string>Shell</string>
+			<key>LSHandlerRank</key><string>Alternate</string>
+			<key>LSItemContentTypes</key><array><string>com.apple.terminal.shell-script</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Shell Script</string>
+			<key>CFBundleTypeRole</key><string>Shell</string>
+			<key>LSHandlerRank</key><string>Alternate</string>
+			<key>LSItemContentTypes</key><array><string>public.shell-script</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Unix Executable</string>
+			<key>CFBundleTypeRole</key><string>Shell</string>
+			<key>LSHandlerRank</key><string>Alternate</string>
+			<key>LSItemContentTypes</key><array><string>public.unix-executable</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Terminal Tool</string>
+			<key>CFBundleTypeRole</key><string>Shell</string>
+			<key>LSHandlerRank</key><string>Alternate</string>
+			<key>LSItemContentTypes</key><array><string>com.apple.terminal.tool</string></array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key><string>SSH URL</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleURLSchemes</key><array><string>ssh</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key><string>Telnet URL</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleURLSchemes</key><array><string>telnet</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key><string>Manual Page URL</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleURLSchemes</key><array><string>x-man-page</string></array>
+		</dict>
+	</array>
 </dict>
 </plist>

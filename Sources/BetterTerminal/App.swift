@@ -34,6 +34,8 @@ struct BetterTerminalApp: App {
             WindowView().frame(minWidth: 480, minHeight: 320)
         }
         .defaultSize(width: 900, height: 650)
+        // Opened files and URLs go to AppDelegate (OpenHandler); without this SwiftUI also opens an empty window per event.
+        .handlesExternalEvents(matching: [])
         .commands { PaneCommands(prefs: prefs) }
 
         Settings { SettingsView() }
@@ -194,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = true
         if CommandLine.arguments.contains("--classic") { Prefs.shared.forceSafeMode() }
         keyMonitor = AppDelegate.installKeyMonitor()
+        MainActor.assumeIsolated { OpenHandler.didFinishLaunching() }
         // Scrolling up in a thread stops it following new output.
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             MainActor.assumeIsolated {
@@ -259,6 +262,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return event
         }
+    }
+
+    /// Finder, `open` and links hand us scripts and ssh/telnet/x-man-page URLs, on a cold launch too.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated { OpenHandler.open(urls) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

@@ -56,7 +56,11 @@ struct WindowView: View {
             })
             .navigationTitle(model.title)
             .focusedSceneObject(model)
-            .onAppear { let open = openWindow; AppActions.openPaneWindow = { open(id: "pane") } }
+            .onAppear {
+                let open = openWindow
+                AppActions.openPaneWindow = { open(id: "pane") }
+                OpenHandler.continueQueue()
+            }
             .onDisappear { model.closeAll() }
     }
 }
