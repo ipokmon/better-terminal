@@ -1,7 +1,7 @@
 # STATUS: better-terminal
 
 **State:** QA
-**Last session:** 2026-11-04 | **Last QA:** see QA_LOG.md
+**Last session:** 2026-11-04 | **Last QA:** PASS WITH ISSUES (2026-11-04, attempt 2, c582ada)
 
 ## Working (verified)
 - Default-terminal handling (branch `feat/default-terminal-handler`): Info.plist document and URL types; `application(_:open:)` for files and ssh/telnet/x-man-page URLs; pure parser `OpenRequest` with 30+ tests. `make test`: 77 tests pass.
@@ -14,6 +14,8 @@
 | Sev | Issue | Since |
 |---|---|---|
 | low | `telnet` is not shipped with macOS; telnet links show "command not found" unless one is installed | 2026-11-04 |
+| med | Window queue untested automatically; a plan can land in a window the user opens with ⌘N at the same moment (QA attempt 2) | 2026-11-04 |
+| low | Cold launch finds File ▸ New Window by its English title (alerts if missing) | 2026-11-04 |
 | low | Reusing the window SwiftUI opens at a document launch lost the typed command (seen 3/3, cause not found); avoided by always opening a fresh window | 2026-11-04 |
 
 ## Blocked on / needs CEO
